@@ -1,0 +1,63 @@
+/**
+ * Document: MaxCompiler Tutorial (maxcompiler-tutorial)
+ * Chapter: 6      Exercise Solution: 1      Name: Vector reverse solution
+ * MaxFile name: VectorReverseSolution
+ * Summary:
+ * 	   Manager for the vector-reversing kernel. All IO is between the CPU and the DFE.
+ */
+
+package solutions.vectorreversesolution;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.platform.max5.manager.MAX5CManager;
+
+public class VectorReverseSolutionManager extends MAX5CManager {
+
+	static int vectorSize = 2;
+	static int vectorSize5 = 5; 
+	static int vectorSize3 = 3; 
+	static int vectorSize15 = 15; 
+
+	public VectorReverseSolutionManager(EngineParameters params) {
+		super(params);
+		Kernel kernel = new VectorReverseSolutionKernel(makeKernelParameters("VectorReverseSolutionKernel"));
+		KernelBlock kernelBlock = addKernel(kernel);
+
+		kernelBlock.getInput("x") <== addStreamFromCPU("x");
+		kernelBlock.getInput("C") <== addStreamFromCPU("C");
+		kernelBlock.getInput("r") <== addStreamFromCPU("r");
+		kernelBlock.getInput("V") <== addStreamFromCPU("V");
+		kernelBlock.getInput("VMeas") <== addStreamFromCPU("VMeas");
+		addStreamToCPU("outVector") <== kernelBlock.getOutput("outVector");
+
+		addMaxFileConstant("vectorSize", vectorSize);
+		createSlicInterface(interfaceDefault());
+		setAllowNonMultipleTransitions(true);
+	}
+
+	public static void main(String[] args) {
+		VectorReverseSolutionManager manager = new VectorReverseSolutionManager(new EngineParameters(args));
+		manager.build();
+	}
+
+	static EngineInterface interfaceDefault() {
+		EngineInterface ei = new EngineInterface();
+		InterfaceParam size = ei.addParam("size", CPUTypes.INT32);
+		ei.setTicks("VectorReverseSolutionKernel", size);
+		ei.setStream("x", CPUTypes.DOUBLE, vectorSize5 * size * CPUTypes.DOUBLE.sizeInBytes());
+		ei.setStream("C", CPUTypes.DOUBLE, vectorSize15 * size * CPUTypes.DOUBLE.sizeInBytes());
+		ei.setStream("r", CPUTypes.DOUBLE, vectorSize * size * CPUTypes.DOUBLE.sizeInBytes());
+		ei.setStream("V", CPUTypes.DOUBLE, vectorSize3 * size * CPUTypes.DOUBLE.sizeInBytes());
+		ei.setStream("VMeas", CPUTypes.DOUBLE, vectorSize3 * size * CPUTypes.DOUBLE.sizeInBytes());
+		ei.setStream("outVector", CPUTypes.DOUBLE, 25 * size * CPUTypes.DOUBLE.sizeInBytes());
+		
+		return ei;
+	}
+
+}
+

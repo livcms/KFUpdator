@@ -1,0 +1,142 @@
+/**
+ * Document: MaxCompiler Tutorial (maxcompiler-tutorial)
+ * Chapter: 6      Exercise Solution: 1      Name: Vector reverse solution
+ * MaxFile name: VectorReverseSolution
+ * Summary:
+ * 	   Kernel that reverses a vector.
+ */
+
+
+package solutions.vectorreversesolution;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import java.util.Arrays;
+//import matMul.MatMul; 
+import matrix.*; 
+
+
+class VectorReverseSolutionKernel extends Kernel {
+	
+	//this is ugly, is there a better way of doing this? 
+	final int vectorSize = 2;
+	final int vectorSize3 = 3; 
+	final int vectorSize5 = 5; 
+	final int vectorSize15 = 15; 
+	final int tmpVecSize = 25; 
+	
+	final DFEVectorType<DFEVar> vectorType =
+		new DFEVectorType<DFEVar>(dfeFloat(11,53), vectorSize);
+	
+	final DFEVectorType<DFEVar> vectorType3 =
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), vectorSize3);
+	
+	final DFEVectorType<DFEVar> vectorType5 =
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), vectorSize5);
+	
+	final DFEVectorType<DFEVar> vectorType15 = 
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), vectorSize15); 
+	
+	final DFEVectorType<DFEVar> tmpVec = 
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), tmpVecSize); 
+	
+
+	VectorReverseSolutionKernel(KernelParameters parameters) {
+		super(parameters);
+
+		// Input
+		// x is (q/p, λ, φ, x⊥ , y⊥)
+		DFEVector<DFEVar> x = io.input("x", vectorType5);
+		//C, V and VMeas are symmetric matrices
+		// C is covariance matrix of x
+		DFEVector<DFEVar> C = io.input("C", vectorType15); 
+		// r is measured position of hit
+		DFEVector<DFEVar> r = io.input("r", vectorType); 
+		// V is covariance matrix of r
+		DFEVector<DFEVar> V = io.input("V", vectorType3); 
+		//VMeas is covariance matrix of RMeas, where RMeas is the position of hit evolved by matrix equations, which is the last two elements of x 
+		DFEVector<DFEVar> VMeas = io.input("VMeas", vectorType3); 
+
+
+		
+		//It would be better to put the array straight in the Matrix funciton, but then it won't know it's DFEVars. Would be good to fix 
+		//Difference between measured and evolved hits 
+		DFEVar r2Fill[][] = {{r[0]-x[3]}, {r[1]-x[4]}}; 
+		Matrix rMatrix = new Matrix(r2Fill); 
+		
+		//Sum of covariances of hit and projected hit 
+		DFEVar R[] = {V[0]+VMeas[0], V[1]+VMeas[1], V[2]+VMeas[2]}; 
+		// Determinant of R
+		DFEVar det_R = R[0]*R[2] - R[1]*R[1]; 
+		//The inverse of the sum of covariance matrices 
+		DFEVar invertedRFill[][] = {{R[2]/det_R, -R[1]/det_R}, {-R[1]/det_R,R[0]/det_R}};
+		Matrix invertedR = new Matrix(invertedRFill); 
+		//Will need the matrix V later, expanding to 4 elements
+		DFEVar[][] VFill = {{V[0], V[1]}, {V[1], V[2]}};  
+		Matrix VMatrix = new Matrix(VFill); 
+		
+		/*Convert the lower triangle of the symmetric matrix to a full matrix 
+		 * It is read in as 
+		 * 0
+		 * 1,2
+		 * 3,4,5 etc... 
+		 */
+		DFEVar[][] CFull = new DFEVar[5][5];		
+
+		int count = 0;
+		for( int i = 0; i < 5; i++){ 
+			for( int j = 0; j < 5; j++){
+		       if(j == i || j < i){
+		            CFull[i][j]  = C[count];
+		            CFull[j][i] = C[count];
+		            count = count+1;
+		        }
+			}
+		}
+		
+		
+		/* Calculating final state vector 
+		 *  K is Kalman gain, which  minimises covariance matrix of the new state vector 
+		 */
+		//R is really set as a 5x2 matrix in cmssw, but is sparse, so really need only parts of C
+		Matrix CMatrix = new Matrix(CFull);
+		Matrix CLastTwoCols = CMatrix.slice(0, 4, 3, 4); 
+		Matrix K = CLastTwoCols.times(invertedR); 
+		// fsv = x + K*r
+		Matrix Kr = K.times(rMatrix); 
+		DFEVar[] KrArr = Kr.matrixTo1DArray(); 
+		DFEVar[] fsv = new DFEVar[5]; 
+		for (int i = 0 ; i <  5; i++ )
+			fsv[i] = x[i] + KrArr[i]; 
+
+		
+		
+		/* Calculating final state error; the covariance matrix of fsv
+		 * Again, in cmssw K is treated as a 5x5 spare matrix where the first three columns are empty
+		 */
+		Matrix CLastTwoRows = CMatrix.slice(3, 4, 0, 4);
+		Matrix A = K.times(CLastTwoRows); 
+		Matrix ALastTwoRows = A.slice(3,4, 0, 4);
+		Matrix KA = K.times(ALastTwoRows); 
+		Matrix KVKt = K.times(VMatrix).times(K.transpose());
+		//since this is symmetric, this computation could be halved with the right indexing 
+		Matrix fseMat = CMatrix.minus(A).minus(A.transpose()).plus(KA).plus(KVKt) ; 
+		DFEVar[] fse = fseMat.matrixTo1DArray(); 
+		
+
+		
+		//Need to either set two output streams, or concat the vectors to get final state vector and error
+		//fse is also symmetric, so should change to only send half the elements 
+		DFEVector<DFEVar> outVector = tmpVec.newInstance(this);
+
+		for(int i = 0; i < tmpVecSize; i++)
+			//outVector[i] <== r[i]-x[3+i];
+			outVector[i] <== fse[i];
+
+		// Output
+		io.output("outVector", outVector, tmpVec);
+	}
+}

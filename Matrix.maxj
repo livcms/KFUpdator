@@ -1,0 +1,138 @@
+package matrix;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFloat;
+
+/* adapted from: 
+ * https://introcs.cs.princeton.edu/java/95linear/Matrix.java.html
+ */
+
+
+
+
+final public class Matrix {
+    private final int M;             // number of rows
+    private final int N;             // number of columns
+    private final DFEVar[][] data;   // M-by-N array
+
+    // create M-by-N matrix of 0's
+    public Matrix(int M, int N) {
+        this.M = M;
+        this.N = N;
+        data = new DFEVar[M][N];
+    }
+
+    // Identity 
+    // create matrix based on 2d array
+    public Matrix(DFEVar[][] data) {
+        M = data.length;
+        N = data[0].length;
+        this.data = new DFEVar[M][N];
+        for (int i = 0; i < M; i++)
+            for (int j = 0; j < N; j++)
+                    this.data[i][j] = data[i][j];
+    }
+
+    // copy constructor
+   private Matrix(Matrix A) { this(A.data); }
+
+    // create and return the transpose of the invoking matrix
+    public Matrix transpose() {
+        Matrix A = new Matrix(N, M);
+        for (int i = 0; i < M; i++)
+            for (int j = 0; j < N; j++)
+                A.data[j][i] = this.data[i][j];
+        return A;
+    }
+
+    // return C = A + B
+    public Matrix plus(Matrix B) {
+        Matrix A = this;
+        if (B.M != A.M || B.N != A.N) throw new RuntimeException("Illegal matrix dimensions.");
+        Matrix C = new Matrix(M, N);
+        for (int i = 0; i < M; i++)
+            for (int j = 0; j < N; j++)
+                C.data[i][j] = A.data[i][j] + B.data[i][j];
+        return C;
+    }
+
+
+    // return C = A - B
+    public Matrix minus(Matrix B) {
+        Matrix A = this;
+        if (B.M != A.M || B.N != A.N) throw new RuntimeException("Illegal matrix dimensions.");
+        Matrix C = new Matrix(M, N);
+        for (int i = 0; i < M; i++)
+            for (int j = 0; j < N; j++)
+                C.data[i][j] = A.data[i][j] - B.data[i][j];
+        return C;
+    }
+    
+
+    // does A = B exactly?
+    public boolean eq(Matrix B) {
+        Matrix A = this;
+        if (B.M != A.M || B.N != A.N) throw new RuntimeException("Illegal matrix dimensions.");
+        for (int i = 0; i < M; i++)
+            for (int j = 0; j < N; j++)
+                if (A.data[i][j] != B.data[i][j]) return false;
+        return true;
+    }
+
+    // return C = A * B
+    public Matrix times(Matrix B) {
+        Matrix A = this;
+        if (A.N != B.M) throw new RuntimeException("Illegal matrix dimensions.");
+        Matrix C = new Matrix(A.M, B.N);
+        for (int i = 0; i < C.M; i++)
+            for (int j = 0; j < C.N; j++)
+                for (int k = 0; k < A.N; k++)
+                	//can't add to the element if it doesn't exist 
+                	try{
+                    C.data[i][j] += (A.data[i][k]*B.data[k][j]);
+                	}
+        			catch(Exception err){
+        				C.data[i][j] = (A.data[i][k]*B.data[k][j]);
+        			}
+        return C;
+    }
+    
+    
+    //Slices a matrix. Takes indices where to beign and inclusive the ends 
+    public Matrix slice(int beginRow, int endRow, int beginCol, int endCol) {
+    	Matrix A = this;
+    	int nrow  = endRow-beginRow; 
+    	int ncol =  endCol-beginCol; 
+        Matrix res = new Matrix(nrow+1, ncol+1);
+        int iterRow = beginRow; 
+        int iterCol = beginCol; 
+        for (int i = 0; i < nrow + 1; i++){
+            for (int j = 0; j < ncol + 1; j++){
+                res.data[i][j] = A.data[iterRow][iterCol];
+                iterCol++; 
+            }
+            iterCol = beginCol; 
+            iterRow++; 
+        }
+        return res;
+    }
+   
+    public int[] getDims(){
+    	Matrix A = this; 
+    	int[] dims = {A.M,A.N}; 
+    	return  dims;
+    }
+    
+    public DFEVar[] matrixTo1DArray(){
+    	Matrix A = this; 
+    	int counter = 0;
+    	DFEVar[] res = new DFEVar[A.M*A.N]; 
+    	for (int i = 0; i < A.M; i++){
+    		for (int j = 0; j < A.N; j++){
+    			res[counter] = A.data[i][j]; 
+    			counter++;
+    			}
+    	}
+    	return res;
+    }
+    }
+
